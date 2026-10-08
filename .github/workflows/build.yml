@@ -1,0 +1,67 @@
+name: 앱 빌드
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    name: 안드로이드 APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 소스 풀기
+        run: unzip -q -o source.zip
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: 서명 키 준비
+        env:
+          SIGNING_KEY: ${{ secrets.SIGNING_KEY }}
+        run: |
+          if [ -n "$SIGNING_KEY" ]; then
+            echo "$SIGNING_KEY" | base64 -d > android/app/release.keystore
+            echo "서명 키 사용"
+          else
+            echo "::warning::SIGNING_KEY 비밀값이 없어 임시 키로 서명합니다. 이 경우 새 버전으로 업데이트할 때 앱을 지웠다가 다시 설치해야 해요."
+          fi
+
+      - name: APK 만들기
+        working-directory: android
+        env:
+          KEYSTORE_PASSWORD: coupondrawer
+          KEY_PASSWORD: coupondrawer
+          KEY_ALIAS: coupon
+        run: gradle assembleRelease --no-daemon --stacktrace
+
+      - name: 파일 이름 정리
+        run: cp android/app/build/outputs/apk/release/app-release.apk stock-helper.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stock-helper-apk
+          path: stock-helper.apk
+
+      - name: 릴리스에 올리기
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.2.${{ github.run_number }}
+          name: 주식도우미 v1.2.${{ github.run_number }}
+          make_latest: "true"
+          files: stock-helper.apk
+          body: |
+            휴대폰에서 아래 **stock-helper.apk** 를 눌러 내려받고 설치하세요.
+            (처음 설치할 때 '출처를 알 수 없는 앱 설치'를 허용해야 해요.)
+            ※ 기술적 지표를 계산한 참고 자료이며 수익을 보장하지 않습니다. 투자 판단과 책임은 본인에게 있습니다.
